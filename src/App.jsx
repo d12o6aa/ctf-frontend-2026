@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-
+import AdminDashboard from "./AdminDashboard";
 /* =============================================================================
    DESIGN SYSTEM — "University Portal" (Sho2oon AI)
    ============================================================================= */
@@ -129,6 +129,13 @@ function LoginScreen({ onLogin, loading, error }) {
   const submit = (e) => {
     e.preventDefault();
     if (!username || !password) return;
+    
+    // الباسورد السري للدخول كأدمن (تقدري تغيريه)
+    if (username === "admin" && password === "arabguard2026") {
+      onLogin("ADMIN_MODE", ""); // مجرد إشارة لـ App.jsx
+      return;
+    }
+    
     onLogin(username, password);
   };
 
@@ -438,6 +445,7 @@ function Composer({ onSend, disabled }) {
 
 export default function App() {
   // Using custom hook to persist data across refreshes
+  const [isAdminMode, setIsAdminMode] = useState(false);
   const [team, setTeam] = useStickyState(null, "ctf_team");
   const [sessionId, setSessionId] = useStickyState(null, "ctf_session");
   const [activeChallenge, setActiveChallenge] = useStickyState(null, "ctf_challenge");
@@ -458,6 +466,12 @@ export default function App() {
   }, [messages, isThinking]);
 
   const handleLogin = async (username, password) => {
+    // لو كانت إشارة الدخول للأدمن
+    if (username === "ADMIN_MODE") {
+      setIsAdminMode(true);
+      return;
+    }
+    // ... باقي كود الـ Login العادي بتاعك زي ما هو
     setLoginLoading(true);
     setLoginError(null);
     try {
@@ -561,6 +575,10 @@ export default function App() {
   };
 
   const globalStyle = FONT_IMPORTS + GLOBAL_KEYFRAMES;
+
+  if (isAdminMode) {
+    return <AdminDashboard onExit={() => setIsAdminMode(false)} />;
+  }
 
   if (!team) {
     return (
