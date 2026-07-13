@@ -6,6 +6,9 @@ export default function AdminDashboard({ onExit }) {
   const [teams, setTeams] = useState([]);
   const [challenges, setChallenges] = useState([]);
   
+  // State for the new Stats API
+  const [stats, setStats] = useState({ leaderboard: [], challenges: [] });
+  
   // States for new Team
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamPassword, setNewTeamPassword] = useState("");
@@ -28,8 +31,11 @@ export default function AdminDashboard({ onExit }) {
     try {
       const resTeams = await fetch(`${API_BASE}/admin/teams`);
       const resChallenges = await fetch(`${API_BASE}/admin/challenges`);
+      const resStats = await fetch(`${API_BASE}/admin/stats`); // جلب الإحصائيات الجديدة
+
       if (resTeams.ok) setTeams(await resTeams.json());
       if (resChallenges.ok) setChallenges(await resChallenges.json());
+      if (resStats.ok) setStats(await resStats.json());
     } catch (err) {
       console.error("Failed to fetch data", err);
     }
@@ -37,6 +43,9 @@ export default function AdminDashboard({ onExit }) {
 
   useEffect(() => {
     fetchData();
+    // Refresh stats every 10 seconds to keep leaderboard live
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleAddTeam = async (e) => {
@@ -136,6 +145,68 @@ export default function AdminDashboard({ onExit }) {
           </div>
         )}
 
+        {/* الإحصائيات ولوحة الصدارة */}
+        <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+          {/* Leaderboard */}
+          <div className="rounded-xl bg-white p-6 shadow-sm border-t-4 border-yellow-400">
+            <h2 className="mb-4 text-xl font-bold text-gray-800">🏆 لوحة الصدارة (Leaderboard)</h2>
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full text-right text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-gray-600">
+                    <th className="p-2">المركز</th>
+                    <th className="p-2">الفريق</th>
+                    <th className="p-2">النقاط</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.leaderboard.length === 0 ? (
+                    <tr><td colSpan="3" className="p-4 text-center text-gray-500 font-bold">لا توجد بيانات بعد</td></tr>
+                  ) : (
+                    stats.leaderboard.map((team, idx) => (
+                      <tr key={idx} className="border-b hover:bg-gray-50">
+                        <td className="p-2 font-bold text-gray-500">#{idx + 1}</td>
+                        <td className="p-2 font-bold text-blue-600">{team.team}</td>
+                        <td className="p-2 font-bold text-green-600">{team.score}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* إحصائيات التحديات (First Blood) */}
+          <div className="rounded-xl bg-white p-6 shadow-sm border-t-4 border-red-500">
+            <h2 className="mb-4 text-xl font-bold text-gray-800">📊 إحصائيات التحديات (First Blood)</h2>
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full text-right text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-gray-600">
+                    <th className="p-2">التحدي</th>
+                    <th className="p-2">عدد الحلول</th>
+                    <th className="p-2">أول فريق حل (First Blood) 🩸</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.challenges.length === 0 ? (
+                    <tr><td colSpan="3" className="p-4 text-center text-gray-500 font-bold">لا توجد تحديات</td></tr>
+                  ) : (
+                    stats.challenges.map((c, idx) => (
+                      <tr key={idx} className="border-b hover:bg-gray-50">
+                        <td className="p-2 font-bold text-gray-800">{c.name}</td>
+                        <td className="p-2 font-bold text-blue-600">{c.solves_count}</td>
+                        <td className="p-2 font-bold text-red-600">{c.first_blood}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* أدوات الإدارة الأساسية */}
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* Teams Section */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
