@@ -5,15 +5,12 @@ const API_BASE = "https://ox-vault-backend-2026-cb729bd57697.herokuapp.com";
 export default function AdminDashboard({ onExit }) {
   const [teams, setTeams] = useState([]);
   const [challenges, setChallenges] = useState([]);
-  
-  // State for the new Stats API
   const [stats, setStats] = useState({ leaderboard: [], challenges: [] });
+  const [isCompetitionActive, setIsCompetitionActive] = useState(false); // حالة المسابقة
   
-  // States for new Team
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamPassword, setNewTeamPassword] = useState("");
 
-  // States for new Challenge
   const [newChallengeName, setNewChallengeName] = useState("");
   const [newChallengePrompt, setNewChallengePrompt] = useState("");
   const [newChallengeFlag, setNewChallengeFlag] = useState("");
@@ -31,11 +28,16 @@ export default function AdminDashboard({ onExit }) {
     try {
       const resTeams = await fetch(`${API_BASE}/admin/teams`);
       const resChallenges = await fetch(`${API_BASE}/admin/challenges`);
-      const resStats = await fetch(`${API_BASE}/admin/stats`); // جلب الإحصائيات الجديدة
+      const resStats = await fetch(`${API_BASE}/admin/stats`);
+      const resStatus = await fetch(`${API_BASE}/admin/status`); // جلب حالة المسابقة
 
       if (resTeams.ok) setTeams(await resTeams.json());
       if (resChallenges.ok) setChallenges(await resChallenges.json());
       if (resStats.ok) setStats(await resStats.json());
+      if (resStatus.ok) {
+        const statusData = await resStatus.json();
+        setIsCompetitionActive(statusData.is_active);
+      }
     } catch (err) {
       console.error("Failed to fetch data", err);
     }
@@ -43,10 +45,23 @@ export default function AdminDashboard({ onExit }) {
 
   useEffect(() => {
     fetchData();
-    // Refresh stats every 10 seconds to keep leaderboard live
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // التحكم في حالة المسابقة
+  const toggleCompetition = async () => {
+    if (!window.confirm(`هل أنت متأكد من ${isCompetitionActive ? "إيقاف" : "تشغيل"} المسابقة؟`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/toggle_status?active=${!isCompetitionActive}`, { method: "POST" });
+      if (res.ok) {
+        setIsCompetitionActive(!isCompetitionActive);
+        showMessage(!isCompetitionActive ? "تم فتح المسابقة للفرق! 🟢" : "تم إيقاف المسابقة! 🔴");
+      }
+    } catch (err) {
+      showMessage("خطأ في الاتصال", "error");
+    }
+  };
 
   const handleAddTeam = async (e) => {
     e.preventDefault();
@@ -67,13 +82,13 @@ export default function AdminDashboard({ onExit }) {
         showMessage(errorData.detail || "خطأ في الإضافة", "error");
       }
     } catch (err) {
-      showMessage("خطأ في الاتصال بالخادم", "error");
+      showMessage("خطأ في الاتصال", "error");
     }
     setLoading(false);
   };
 
   const handleDeleteTeam = async (id) => {
-    if (!window.confirm("هل أنت متأكد من حذف هذا الفريق؟")) return;
+    if (!window.confirm("حذف هذا الفريق سيؤدي لحذف كل محادثاته ونقاطه، متأكد؟")) return;
     try {
       const res = await fetch(`${API_BASE}/admin/teams/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -100,20 +115,20 @@ export default function AdminDashboard({ onExit }) {
         }),
       });
       if (res.ok) {
-        showMessage("تم إضافة التحدي بنجاح!");
+        showMessage("تم الإضافة بنجاح!");
         setNewChallengeName("");
         setNewChallengePrompt("");
         setNewChallengeFlag("");
         fetchData();
       }
     } catch (err) {
-      showMessage("خطأ في الاتصال بالخادم", "error");
+      showMessage("خطأ في الاتصال", "error");
     }
     setLoading(false);
   };
 
   const handleDeleteChallenge = async (id) => {
-    if (!window.confirm("هل أنت متأكد من حذف هذا التحدي؟")) return;
+    if (!window.confirm("حذف التحدي سيمسح حلوله السابقة! متأكد؟")) return;
     try {
       const res = await fetch(`${API_BASE}/admin/challenges/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -128,15 +143,24 @@ export default function AdminDashboard({ onExit }) {
   return (
     <div className="min-h-screen bg-[#F3F4F6] p-8" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <div className="mx-auto max-w-6xl">
-        {/* Header */}
+        
+        {/* Header & Kill Switch */}
         <div className="mb-8 flex items-center justify-between rounded-xl bg-white p-6 shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-[#1E3A8A]">⚙️ لوحة تحكم المنظمين (Admin)</h1>
-            <p className="text-sm text-gray-500">إدارة الفرق والتحديات بشكل مباشر</p>
+            <h1 className="text-2xl font-bold text-[#1E3A8A]">⚙️ لوحة تحكم المنظمين</h1>
+            <p className="text-sm text-gray-500">إدارة الفرق والتحديات والتحكم المركزي</p>
           </div>
-          <button onClick={onExit} className="rounded-lg bg-red-100 px-4 py-2 font-bold text-red-600 hover:bg-red-200">
-            خروج من اللوحة
-          </button>
+          <div className="flex gap-4">
+            <button 
+              onClick={toggleCompetition} 
+              className={`rounded-lg px-6 py-2 font-bold text-white shadow transition-all ${isCompetitionActive ? "bg-red-600 hover:bg-red-700 animate-pulse" : "bg-green-600 hover:bg-green-700"}`}
+            >
+              {isCompetitionActive ? "🔴 إيقاف المسابقة" : "🟢 بدء المسابقة"}
+            </button>
+            <button onClick={onExit} className="rounded-lg bg-gray-200 px-4 py-2 font-bold text-gray-700 hover:bg-gray-300">
+              خروج
+            </button>
+          </div>
         </div>
 
         {msg.text && (
@@ -145,75 +169,52 @@ export default function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* الإحصائيات ولوحة الصدارة */}
+        {/* Leaderboard and Stats Stats Code remains the same... */}
         <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* Leaderboard */}
           <div className="rounded-xl bg-white p-6 shadow-sm border-t-4 border-yellow-400">
-            <h2 className="mb-4 text-xl font-bold text-gray-800">🏆 لوحة الصدارة (Leaderboard)</h2>
+            <h2 className="mb-4 text-xl font-bold text-gray-800">🏆 لوحة الصدارة</h2>
             <div className="max-h-64 overflow-y-auto">
               <table className="w-full text-right text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50 text-gray-600">
-                    <th className="p-2">المركز</th>
-                    <th className="p-2">الفريق</th>
-                    <th className="p-2">النقاط</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b bg-gray-50 text-gray-600"><th className="p-2">المركز</th><th className="p-2">الفريق</th><th className="p-2">النقاط</th></tr></thead>
                 <tbody>
-                  {stats.leaderboard.length === 0 ? (
-                    <tr><td colSpan="3" className="p-4 text-center text-gray-500 font-bold">لا توجد بيانات بعد</td></tr>
-                  ) : (
-                    stats.leaderboard.map((team, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50">
-                        <td className="p-2 font-bold text-gray-500">#{idx + 1}</td>
-                        <td className="p-2 font-bold text-blue-600">{team.team}</td>
-                        <td className="p-2 font-bold text-green-600">{team.score}</td>
-                      </tr>
-                    ))
-                  )}
+                  {stats.leaderboard.map((team, idx) => (
+                    <tr key={idx} className="border-b hover:bg-gray-50">
+                      <td className="p-2 font-bold text-gray-500">#{idx + 1}</td>
+                      <td className="p-2 font-bold text-blue-600">{team.team}</td>
+                      <td className="p-2 font-bold text-green-600">{team.score}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* إحصائيات التحديات (First Blood) */}
+          {/* First Blood */}
           <div className="rounded-xl bg-white p-6 shadow-sm border-t-4 border-red-500">
-            <h2 className="mb-4 text-xl font-bold text-gray-800">📊 إحصائيات التحديات (First Blood)</h2>
+            <h2 className="mb-4 text-xl font-bold text-gray-800">📊 إحصائيات التحديات</h2>
             <div className="max-h-64 overflow-y-auto">
               <table className="w-full text-right text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50 text-gray-600">
-                    <th className="p-2">التحدي</th>
-                    <th className="p-2">عدد الحلول</th>
-                    <th className="p-2">أول فريق حل (First Blood) 🩸</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b bg-gray-50 text-gray-600"><th className="p-2">التحدي</th><th className="p-2">عدد الحلول</th><th className="p-2">أول فريق حل 🩸</th></tr></thead>
                 <tbody>
-                  {stats.challenges.length === 0 ? (
-                    <tr><td colSpan="3" className="p-4 text-center text-gray-500 font-bold">لا توجد تحديات</td></tr>
-                  ) : (
-                    stats.challenges.map((c, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50">
-                        <td className="p-2 font-bold text-gray-800">{c.name}</td>
-                        <td className="p-2 font-bold text-blue-600">{c.solves_count}</td>
-                        <td className="p-2 font-bold text-red-600">{c.first_blood}</td>
-                      </tr>
-                    ))
-                  )}
+                  {stats.challenges.map((c, idx) => (
+                    <tr key={idx} className="border-b hover:bg-gray-50">
+                      <td className="p-2 font-bold text-gray-800">{c.name}</td>
+                      <td className="p-2 font-bold text-blue-600">{c.solves_count}</td>
+                      <td className="p-2 font-bold text-red-600">{c.first_blood}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        {/* أدوات الإدارة الأساسية */}
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          {/* Teams Section */}
+          {/* Teams Section - Fixed Column Mapping */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xl font-bold text-gray-800">👥 إدارة الفرق</h2>
-            
             <form onSubmit={handleAddTeam} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <h3 className="mb-3 text-sm font-bold text-gray-600">إضافة فريق جديد</h3>
               <div className="mb-3 grid grid-cols-2 gap-3">
                 <input required value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="اسم الفريق" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <input required value={newTeamPassword} onChange={(e) => setNewTeamPassword(e.target.value)} placeholder="كلمة المرور" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
@@ -235,10 +236,10 @@ export default function AdminDashboard({ onExit }) {
                   {teams.map(t => (
                     <tr key={t.id} className="border-b hover:bg-gray-50">
                       <td className="p-2">{t.id}</td>
-                      <td className="p-2 font-bold">{t.username}</td>
+                      <td className="p-2 font-bold text-blue-600">{t.username || "بدون اسم"}</td>
                       <td className="p-2 text-green-600">{t.total_score}</td>
                       <td className="p-2">
-                        <button onClick={() => handleDeleteTeam(t.id)} className="text-red-500 hover:text-red-700">🗑️ حذف</button>
+                        <button onClick={() => handleDeleteTeam(t.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
                       </td>
                     </tr>
                   ))}
@@ -249,16 +250,14 @@ export default function AdminDashboard({ onExit }) {
 
           {/* Challenges Section */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-bold text-gray-800">🎯 إدارة التحديات (الخدمات)</h2>
-            
+            <h2 className="mb-4 text-xl font-bold text-gray-800">🎯 إدارة التحديات</h2>
             <form onSubmit={handleAddChallenge} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <h3 className="mb-3 text-sm font-bold text-gray-600">إضافة تحدي جديد</h3>
               <div className="mb-3 space-y-3">
-                <input required value={newChallengeName} onChange={(e) => setNewChallengeName(e.target.value)} placeholder="اسم التحدي (مثال: تسجيل المواد)" className="w-full rounded border p-2 text-sm outline-none focus:border-blue-500" />
-                <textarea required value={newChallengePrompt} onChange={(e) => setNewChallengePrompt(e.target.value)} placeholder="System Prompt (تعليمات الذكاء الاصطناعي)" className="h-20 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
+                <input required value={newChallengeName} onChange={(e) => setNewChallengeName(e.target.value)} placeholder="اسم التحدي" className="w-full rounded border p-2 text-sm outline-none focus:border-blue-500" />
+                <textarea required value={newChallengePrompt} onChange={(e) => setNewChallengePrompt(e.target.value)} placeholder="System Prompt" className="h-20 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <div className="grid grid-cols-2 gap-3">
-                  <input required value={newChallengeFlag} onChange={(e) => setNewChallengeFlag(e.target.value)} placeholder="صيغة العلم FLAG{...}" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
-                  <input required type="number" value={newChallengePoints} onChange={(e) => setNewChallengePoints(e.target.value)} placeholder="النقاط (مثال: 500)" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
+                  <input required value={newChallengeFlag} onChange={(e) => setNewChallengeFlag(e.target.value)} placeholder="FLAG{...}" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
+                  <input required type="number" value={newChallengePoints} onChange={(e) => setNewChallengePoints(e.target.value)} placeholder="النقاط" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 </div>
               </div>
               <button disabled={loading} className="w-full rounded bg-[#16A34A] py-2 text-sm font-bold text-white hover:bg-green-700">إضافة التحدي</button>
@@ -266,14 +265,7 @@ export default function AdminDashboard({ onExit }) {
 
             <div className="max-h-64 overflow-y-auto">
               <table className="w-full text-right text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50 text-gray-600">
-                    <th className="p-2">ID</th>
-                    <th className="p-2">اسم التحدي</th>
-                    <th className="p-2">النقاط</th>
-                    <th className="p-2">إجراء</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b bg-gray-50 text-gray-600"><th className="p-2">ID</th><th className="p-2">الاسم</th><th className="p-2">النقاط</th><th className="p-2">إجراء</th></tr></thead>
                 <tbody>
                   {challenges.map(c => (
                     <tr key={c.id} className="border-b hover:bg-gray-50">
@@ -281,7 +273,7 @@ export default function AdminDashboard({ onExit }) {
                       <td className="p-2 font-bold">{c.name}</td>
                       <td className="p-2 text-blue-600">{c.base_points}</td>
                       <td className="p-2">
-                        <button onClick={() => handleDeleteChallenge(c.id)} className="text-red-500 hover:text-red-700">🗑️ حذف</button>
+                        <button onClick={() => handleDeleteChallenge(c.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
                       </td>
                     </tr>
                   ))}
