@@ -564,6 +564,7 @@ function EmptyState({ onOpenServices }) {
 
 export default function App() {
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [adminKey, setAdminKey] = useState(null);
   const [challenges, setChallenges] = useState([]);
 
   // Persistent user state (راحة الاستخدام فقط — يُعاد التحقق من السيرفر عند الحاجة)
@@ -670,6 +671,10 @@ export default function App() {
       }
       const data = await res.json();
       if (data.role === "admin") {
+        // admin_key لازم يترسل كـ header X-Admin-Key في كل طلب /admin/*
+        // بعد كده — ميتخزنش في localStorage عمداً، فبيتمسح تلقائياً
+        // لو المستخدم عمل ريفريش، ولازم يعيد تسجيل الدخول.
+        setAdminKey(data.admin_key);
         setIsAdminMode(true);
         return;
       }
@@ -783,7 +788,15 @@ export default function App() {
   const globalStyle = FONT_IMPORTS + GLOBAL_KEYFRAMES;
 
   if (isAdminMode) {
-    return <AdminDashboard onExit={() => setIsAdminMode(false)} />;
+    return (
+      <AdminDashboard
+        adminKey={adminKey}
+        onExit={() => {
+          setIsAdminMode(false);
+          setAdminKey(null);
+        }}
+      />
+    );
   }
 
   if (!team) {

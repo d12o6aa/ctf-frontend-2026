@@ -1,13 +1,26 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 const API_BASE = "https://ox-vault-backend-2026-cb729bd57697.herokuapp.com";
 
-export default function AdminDashboard({ onExit }) {
+export default function AdminDashboard({ adminKey, onExit }) {
   const [teams, setTeams] = useState([]);
   const [challenges, setChallenges] = useState([]);
-  const [stats, setStats] = useState({ leaderboard: [], challenges: [] });
-  const [isCompetitionActive, setIsCompetitionActive] = useState(false); // حالة المسابقة
-  
+  const [stats, setStats] = useState({
+    overview: {
+      teams_count: 0,
+      challenges_count: 0,
+      active_sessions_count: 0,
+      total_attempts: 0,
+      total_blocked: 0,
+      overall_blocked_rate: 0,
+      is_active: false,
+    },
+    leaderboard: [],
+    challenges: [],
+  });
+  const [isCompetitionActive, setIsCompetitionActive] = useState(false);
+  const [authError, setAuthError] = useState(false);
+
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamPassword, setNewTeamPassword] = useState("");
 
@@ -24,39 +37,71 @@ export default function AdminDashboard({ onExit }) {
     setTimeout(() => setMsg({ text: "", type: "" }), 3000);
   };
 
-  const fetchData = async () => {
+  // كل طلب أدمن لازم يحمل هذا الهيدر. لو adminKey مفقود أو رفضه السيرفر
+  // (403)، نعتبر الجلسة منتهية ونرجّع المستخدم لتسجيل الدخول بدل ما
+  // نسيبه شايف بيانات فاضية بصمت.
+  const adminFetch = useCallback(
+    async (path, options = {}) => {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          "X-Admin-Key": adminKey || "",
+        },
+      });
+      if (res.status === 403 || res.status === 401) {
+        setAuthError(true);
+      }
+      return res;
+    },
+    [adminKey]
+  );
+
+  const fetchData = useCallback(async () => {
     try {
-      const resTeams = await fetch(`${API_BASE}/admin/teams`);
-      const resChallenges = await fetch(`${API_BASE}/admin/challenges`);
-      const resStats = await fetch(`${API_BASE}/admin/stats`);
-      const resStatus = await fetch(`${API_BASE}/admin/status`); // جلب حالة المسابقة
+      const [resTeams, resChallenges, resStats] = await Promise.all([
+        adminFetch("/admin/teams"),
+        adminFetch("/admin/challenges"),
+        adminFetch("/admin/stats"),
+      ]);
 
       if (resTeams.ok) setTeams(await resTeams.json());
       if (resChallenges.ok) setChallenges(await resChallenges.json());
-      if (resStats.ok) setStats(await resStats.json());
-      if (resStatus.ok) {
-        const statusData = await resStatus.json();
-        setIsCompetitionActive(statusData.is_active);
+      if (resStats.ok) {
+        const statsData = await resStats.json();
+        setStats(statsData);
+        if (typeof statsData?.overview?.is_active === "boolean") {
+          setIsCompetitionActive(statsData.overview.is_active);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch data", err);
     }
-  };
+  }, [adminFetch]);
 
   useEffect(() => {
+    if (!adminKey) {
+      setAuthError(true);
+      return;
+    }
     fetchData();
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [adminKey, fetchData]);
 
-  // التحكم في حالة المسابقة
   const toggleCompetition = async () => {
     if (!window.confirm(`هل أنت متأكد من ${isCompetitionActive ? "إيقاف" : "تشغيل"} المسابقة؟`)) return;
     try {
-      const res = await fetch(`${API_BASE}/admin/toggle_status?active=${!isCompetitionActive}`, { method: "POST" });
+      const res = await adminFetch("/admin/toggle_status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !isCompetitionActive }),
+      });
       if (res.ok) {
         setIsCompetitionActive(!isCompetitionActive);
         showMessage(!isCompetitionActive ? "تم فتح المسابقة للفرق! 🟢" : "تم إيقاف المسابقة! 🔴");
+      } else if (res.status !== 403) {
+        showMessage("تعذر تنفيذ الطلب", "error");
       }
     } catch (err) {
       showMessage("خطأ في الاتصال", "error");
@@ -67,7 +112,7 @@ export default function AdminDashboard({ onExit }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/teams`, {
+      const res = await adminFetch("/admin/teams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: newTeamName, password: newTeamPassword }),
@@ -77,7 +122,7 @@ export default function AdminDashboard({ onExit }) {
         setNewTeamName("");
         setNewTeamPassword("");
         fetchData();
-      } else {
+      } else if (res.status !== 403) {
         const errorData = await res.json();
         showMessage(errorData.detail || "خطأ في الإضافة", "error");
       }
@@ -90,7 +135,7 @@ export default function AdminDashboard({ onExit }) {
   const handleDeleteTeam = async (id) => {
     if (!window.confirm("حذف هذا الفريق سيؤدي لحذف كل محادثاته ونقاطه، متأكد؟")) return;
     try {
-      const res = await fetch(`${API_BASE}/admin/teams/${id}`, { method: "DELETE" });
+      const res = await adminFetch(`/admin/teams/${id}`, { method: "DELETE" });
       if (res.ok) {
         showMessage("تم الحذف بنجاح!");
         fetchData();
@@ -104,14 +149,14 @@ export default function AdminDashboard({ onExit }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/challenges`, {
+      const res = await adminFetch("/admin/challenges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newChallengeName,
           system_prompt: newChallengePrompt,
           flag_text: newChallengeFlag,
-          base_points: parseInt(newChallengePoints),
+          base_points: parseInt(newChallengePoints, 10),
         }),
       });
       if (res.ok) {
@@ -120,6 +165,8 @@ export default function AdminDashboard({ onExit }) {
         setNewChallengePrompt("");
         setNewChallengeFlag("");
         fetchData();
+      } else if (res.status !== 403) {
+        showMessage("خطأ في الإضافة", "error");
       }
     } catch (err) {
       showMessage("خطأ في الاتصال", "error");
@@ -130,7 +177,7 @@ export default function AdminDashboard({ onExit }) {
   const handleDeleteChallenge = async (id) => {
     if (!window.confirm("حذف التحدي سيمسح حلوله السابقة! متأكد؟")) return;
     try {
-      const res = await fetch(`${API_BASE}/admin/challenges/${id}`, { method: "DELETE" });
+      const res = await adminFetch(`/admin/challenges/${id}`, { method: "DELETE" });
       if (res.ok) {
         showMessage("تم الحذف بنجاح!");
         fetchData();
@@ -140,10 +187,32 @@ export default function AdminDashboard({ onExit }) {
     }
   };
 
+  if (authError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6] p-8" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+        <div className="max-w-sm rounded-xl bg-white p-8 text-center shadow-sm">
+          <div className="mb-3 text-4xl">🔒</div>
+          <h2 className="mb-2 text-lg font-bold text-gray-800">انتهت صلاحية جلسة الأدمن</h2>
+          <p className="mb-6 text-sm text-gray-500">
+            سجّل الدخول مرة أخرى بحساب الأدمن للمتابعة.
+          </p>
+          <button
+            onClick={onExit}
+            className="w-full rounded-lg bg-[#1E3A8A] py-2.5 text-sm font-bold text-white hover:bg-blue-800"
+          >
+            الرجوع لتسجيل الدخول
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const overview = stats.overview || {};
+
   return (
     <div className="min-h-screen bg-[#F3F4F6] p-8" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <div className="mx-auto max-w-6xl">
-        
+
         {/* Header & Kill Switch */}
         <div className="mb-8 flex items-center justify-between rounded-xl bg-white p-6 shadow-sm">
           <div>
@@ -151,8 +220,8 @@ export default function AdminDashboard({ onExit }) {
             <p className="text-sm text-gray-500">إدارة الفرق والتحديات والتحكم المركزي</p>
           </div>
           <div className="flex gap-4">
-            <button 
-              onClick={toggleCompetition} 
+            <button
+              onClick={toggleCompetition}
               className={`rounded-lg px-6 py-2 font-bold text-white shadow transition-all ${isCompetitionActive ? "bg-red-600 hover:bg-red-700 animate-pulse" : "bg-green-600 hover:bg-green-700"}`}
             >
               {isCompetitionActive ? "🔴 إيقاف المسابقة" : "🟢 بدء المسابقة"}
@@ -169,7 +238,19 @@ export default function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* Leaderboard and Stats Stats Code remains the same... */}
+        {/* Overview cards */}
+        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
+          <OverviewCard label="الفرق المسجلة" value={overview.teams_count ?? 0} accent="#1E3A8A" />
+          <OverviewCard label="التحديات" value={overview.challenges_count ?? 0} accent="#2563EB" />
+          <OverviewCard label="جلسات نشطة الآن" value={overview.active_sessions_count ?? 0} accent="#16A34A" />
+          <OverviewCard label="إجمالي المحاولات" value={overview.total_attempts ?? 0} accent="#D97706" />
+          <OverviewCard
+            label="نسبة الحظر الكلية"
+            value={`${overview.overall_blocked_rate ?? 0}%`}
+            accent="#DC2626"
+          />
+        </div>
+
         <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* Leaderboard */}
           <div className="rounded-xl bg-white p-6 shadow-sm border-t-4 border-yellow-400">
@@ -190,18 +271,28 @@ export default function AdminDashboard({ onExit }) {
             </div>
           </div>
 
-          {/* First Blood */}
+          {/* Challenge stats — now with attempts + blocked rate */}
           <div className="rounded-xl bg-white p-6 shadow-sm border-t-4 border-red-500">
             <h2 className="mb-4 text-xl font-bold text-gray-800">📊 إحصائيات التحديات</h2>
             <div className="max-h-64 overflow-y-auto">
               <table className="w-full text-right text-sm">
-                <thead><tr className="border-b bg-gray-50 text-gray-600"><th className="p-2">التحدي</th><th className="p-2">عدد الحلول</th><th className="p-2">أول فريق حل 🩸</th></tr></thead>
+                <thead>
+                  <tr className="border-b bg-gray-50 text-gray-600">
+                    <th className="p-2">التحدي</th>
+                    <th className="p-2">الحلول</th>
+                    <th className="p-2">أول فريق 🩸</th>
+                    <th className="p-2">المحاولات</th>
+                    <th className="p-2">نسبة الحظر</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {stats.challenges.map((c, idx) => (
                     <tr key={idx} className="border-b hover:bg-gray-50">
                       <td className="p-2 font-bold text-gray-800">{c.name}</td>
                       <td className="p-2 font-bold text-blue-600">{c.solves_count}</td>
                       <td className="p-2 font-bold text-red-600">{c.first_blood}</td>
+                      <td className="p-2 text-gray-700">{c.attempts_count ?? 0}</td>
+                      <td className="p-2 text-gray-700">{c.blocked_rate ?? 0}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -211,7 +302,7 @@ export default function AdminDashboard({ onExit }) {
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          {/* Teams Section - Fixed Column Mapping */}
+          {/* Teams Section */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xl font-bold text-gray-800">👥 إدارة الفرق</h2>
             <form onSubmit={handleAddTeam} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -234,12 +325,12 @@ export default function AdminDashboard({ onExit }) {
                 </thead>
                 <tbody>
                   {teams.map(t => (
-                    <tr key={t.id} className="border-b hover:bg-gray-50">
-                      <td className="p-2">{t.id}</td>
-                      <td className="p-2 font-bold text-blue-600">{t.username || "بدون اسم"}</td>
+                    <tr key={t.team_id ?? t.id} className="border-b hover:bg-gray-50">
+                      <td className="p-2">{t.team_id ?? t.id}</td>
+                      <td className="p-2 font-bold text-blue-600">{t.team_name ?? t.username ?? "بدون اسم"}</td>
                       <td className="p-2 text-green-600">{t.total_score}</td>
                       <td className="p-2">
-                        <button onClick={() => handleDeleteTeam(t.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
+                        <button onClick={() => handleDeleteTeam(t.team_id ?? t.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
                       </td>
                     </tr>
                   ))}
@@ -283,6 +374,15 @@ export default function AdminDashboard({ onExit }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function OverviewCard({ label, value, accent }) {
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm border-t-4" style={{ borderTopColor: accent }}>
+      <div className="text-xs font-bold text-gray-500">{label}</div>
+      <div className="mt-1 text-2xl font-bold" style={{ color: accent }}>{value}</div>
     </div>
   );
 }
