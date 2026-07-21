@@ -28,6 +28,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
   const [newChallengePrompt, setNewChallengePrompt] = useState("");
   const [newChallengeFlag, setNewChallengeFlag] = useState("");
   const [newChallengePoints, setNewChallengePoints] = useState(500);
+  const [newChallengeBrief, setNewChallengeBrief] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", type: "" });
@@ -157,6 +158,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
           system_prompt: newChallengePrompt,
           flag_text: newChallengeFlag,
           base_points: parseInt(newChallengePoints, 10),
+          mission_brief: newChallengeBrief || null,
         }),
       });
       if (res.ok) {
@@ -164,6 +166,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
         setNewChallengeName("");
         setNewChallengePrompt("");
         setNewChallengeFlag("");
+        setNewChallengeBrief("");
         fetchData();
       } else if (res.status !== 403) {
         showMessage("خطأ في الإضافة", "error");
@@ -345,6 +348,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
             <form onSubmit={handleAddChallenge} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="mb-3 space-y-3">
                 <input required value={newChallengeName} onChange={(e) => setNewChallengeName(e.target.value)} placeholder="اسم التحدي" className="w-full rounded border p-2 text-sm outline-none focus:border-blue-500" />
+                <textarea value={newChallengeBrief} onChange={(e) => setNewChallengeBrief(e.target.value)} placeholder="نص المهمة اللي يظهر للاعب (القصة والهدف بدون كشف الحل)" className="h-16 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <textarea required value={newChallengePrompt} onChange={(e) => setNewChallengePrompt(e.target.value)} placeholder="System Prompt" className="h-20 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <div className="grid grid-cols-2 gap-3">
                   <input required value={newChallengeFlag} onChange={(e) => setNewChallengeFlag(e.target.value)} placeholder="FLAG{...}" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
