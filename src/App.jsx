@@ -591,10 +591,11 @@ export default function App() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, isThinking]);
 
-  // دالة لجلب التحديات من الباك إند
+  // دالة لجلب التحديات من الباك إند — endpoint عام مخصص للاعبين،
+  // منفصل عن /admin/challenges اللي بقى محمي بمفتاح الأدمن.
   const fetchChallenges = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/challenges`);
+      const res = await fetch(`${API_BASE}/challenges`);
       if (res.ok) {
         const data = await res.json();
         setChallenges(data);
