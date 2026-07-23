@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
+import AdminLogs from "./AdminLogs";
+import ActiveSessions from "./ActiveSessions";
 
 const API_BASE = "https://ox-vault-backend-2026-cb729bd57697.herokuapp.com";
 
@@ -32,6 +34,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", type: "" });
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "logs" | "sessions"
 
   const showMessage = (text, type = "success") => {
     setMsg({ text, type });
@@ -241,6 +244,32 @@ export default function AdminDashboard({ adminKey, onExit }) {
           </div>
         )}
 
+        {/* Tabs */}
+        <div className="mb-6 flex gap-2 border-b border-gray-200">
+          {[
+            { id: "overview", label: "📋 نظرة عامة" },
+            { id: "logs", label: "🛰️ المراقبة الحية" },
+            { id: "sessions", label: "⚡ الجلسات النشطة" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? "border-[#1E3A8A] text-[#1E3A8A]"
+                  : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "logs" && <AdminLogs adminKey={adminKey} />}
+        {activeTab === "sessions" && <ActiveSessions adminKey={adminKey} />}
+
+        {activeTab === "overview" && (
+        <>
         {/* Overview cards */}
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
           <OverviewCard label="الفرق المسجلة" value={overview.teams_count ?? 0} accent="#1E3A8A" />
@@ -377,6 +406,8 @@ export default function AdminDashboard({ adminKey, onExit }) {
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
