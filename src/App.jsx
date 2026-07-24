@@ -434,8 +434,8 @@ function Console({ team, activeChallenge, attempts, onNewChat, onLogout }) {
         <div className="mb-2 text-4xl mt-2">🏫</div>
         <div className="font-bold text-[#1F2937] text-lg">{team?.team_name}</div>
         <div className="mt-1 flex justify-center gap-2 text-sm font-bold">
-          <span className="text-[#6B7280]">النقاط:</span>
-          <span className="text-[#16A34A] text-lg">{team?.total_score ?? 0}</span>
+          {/*<span className="text-[#6B7280]">النقاط:</span>
+          <span className="text-[#16A34A] text-lg">{team?.total_score ?? 0}</span> */}
         </div>
       </div>
 
