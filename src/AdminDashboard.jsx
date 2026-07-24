@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { Pencil, X } from "lucide-react";
 import AdminLogs from "./AdminLogs";
 import ActiveSessions from "./ActiveSessions";
 
@@ -31,6 +32,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
   const [newChallengeFlag, setNewChallengeFlag] = useState("");
   const [newChallengePoints, setNewChallengePoints] = useState(500);
   const [newChallengeBrief, setNewChallengeBrief] = useState("");
+  const [editingChallengeId, setEditingChallengeId] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", type: "" });
@@ -149,12 +151,37 @@ export default function AdminDashboard({ adminKey, onExit }) {
     }
   };
 
-  const handleAddChallenge = async (e) => {
+  // بيفضّي الفورم ويطلع من Edit Mode — بتتنادى بعد نجاح الحفظ، بعد إلغاء
+  // التعديل، وكمان لو المستخدم حذف التحدي اللي كان بيعدّل فيه.
+  const resetChallengeForm = () => {
+    setEditingChallengeId(null);
+    setNewChallengeName("");
+    setNewChallengePrompt("");
+    setNewChallengeFlag("");
+    setNewChallengePoints(500);
+    setNewChallengeBrief("");
+  };
+
+  const handleEditChallengeClick = (c) => {
+    setEditingChallengeId(c.id);
+    setNewChallengeName(c.name);
+    setNewChallengePrompt(c.system_prompt);
+    setNewChallengeFlag(c.flag_text);
+    setNewChallengePoints(c.base_points);
+    setNewChallengeBrief(c.mission_brief || "");
+  };
+
+  // فورم واحد بيخدم الإضافة والتعديل — لو editingChallengeId متحدد بنبعت
+  // PUT للتحدي ده، غير كده POST تحدي جديد.
+  const handleSubmitChallenge = async (e) => {
     e.preventDefault();
     setLoading(true);
+    const isEditing = editingChallengeId !== null;
+    const path = isEditing ? `/admin/challenges/${editingChallengeId}` : "/admin/challenges";
+    const method = isEditing ? "PUT" : "POST";
     try {
-      const res = await adminFetch("/admin/challenges", {
-        method: "POST",
+      const res = await adminFetch(path, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newChallengeName,
@@ -165,14 +192,11 @@ export default function AdminDashboard({ adminKey, onExit }) {
         }),
       });
       if (res.ok) {
-        showMessage("تم الإضافة بنجاح!");
-        setNewChallengeName("");
-        setNewChallengePrompt("");
-        setNewChallengeFlag("");
-        setNewChallengeBrief("");
+        showMessage(isEditing ? "تم حفظ التعديلات بنجاح!" : "تم الإضافة بنجاح!");
+        resetChallengeForm();
         fetchData();
       } else if (res.status !== 403) {
-        showMessage("خطأ في الإضافة", "error");
+        showMessage(isEditing ? "خطأ في حفظ التعديلات" : "خطأ في الإضافة", "error");
       }
     } catch (err) {
       showMessage("خطأ في الاتصال", "error");
@@ -186,6 +210,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
       const res = await adminFetch(`/admin/challenges/${id}`, { method: "DELETE" });
       if (res.ok) {
         showMessage("تم الحذف بنجاح!");
+        if (editingChallengeId === id) resetChallengeForm();
         fetchData();
       }
     } catch (err) {
@@ -374,7 +399,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
           {/* Challenges Section */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xl font-bold text-gray-800">🎯 إدارة التحديات</h2>
-            <form onSubmit={handleAddChallenge} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <form onSubmit={handleSubmitChallenge} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="mb-3 space-y-3">
                 <input required value={newChallengeName} onChange={(e) => setNewChallengeName(e.target.value)} placeholder="اسم التحدي" className="w-full rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <textarea value={newChallengeBrief} onChange={(e) => setNewChallengeBrief(e.target.value)} placeholder="نص المهمة اللي يظهر للاعب (القصة والهدف بدون كشف الحل)" className="h-16 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
@@ -384,7 +409,25 @@ export default function AdminDashboard({ adminKey, onExit }) {
                   <input required type="number" value={newChallengePoints} onChange={(e) => setNewChallengePoints(e.target.value)} placeholder="النقاط" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 </div>
               </div>
-              <button disabled={loading} className="w-full rounded bg-[#16A34A] py-2 text-sm font-bold text-white hover:bg-green-700">إضافة التحدي</button>
+              <div className="flex gap-2">
+                <button
+                  disabled={loading}
+                  className={`flex-1 rounded py-2 text-sm font-bold text-white ${
+                    editingChallengeId !== null ? "bg-[#2563EB] hover:bg-blue-700" : "bg-[#16A34A] hover:bg-green-700"
+                  }`}
+                >
+                  {editingChallengeId !== null ? "حفظ التعديلات" : "إضافة التحدي"}
+                </button>
+                {editingChallengeId !== null && (
+                  <button
+                    type="button"
+                    onClick={resetChallengeForm}
+                    className="flex items-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100"
+                  >
+                    <X size={14} /> إلغاء
+                  </button>
+                )}
+              </div>
             </form>
 
             <div className="max-h-64 overflow-y-auto">
@@ -392,11 +435,14 @@ export default function AdminDashboard({ adminKey, onExit }) {
                 <thead><tr className="border-b bg-gray-50 text-gray-600"><th className="p-2">ID</th><th className="p-2">الاسم</th><th className="p-2">النقاط</th><th className="p-2">إجراء</th></tr></thead>
                 <tbody>
                   {challenges.map(c => (
-                    <tr key={c.id} className="border-b hover:bg-gray-50">
+                    <tr key={c.id} className={`border-b hover:bg-gray-50 ${editingChallengeId === c.id ? "bg-blue-50" : ""}`}>
                       <td className="p-2">{c.id}</td>
                       <td className="p-2 font-bold">{c.name}</td>
                       <td className="p-2 text-blue-600">{c.base_points}</td>
-                      <td className="p-2">
+                      <td className="p-2 flex gap-3">
+                        <button onClick={() => handleEditChallengeClick(c)} className="flex items-center gap-1 text-blue-500 hover:text-blue-700 font-bold">
+                          <Pencil size={14} /> تعديل
+                        </button>
                         <button onClick={() => handleDeleteChallenge(c.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
                       </td>
                     </tr>
