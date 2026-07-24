@@ -562,6 +562,58 @@ function EmptyState({ onOpenServices }) {
 }
 
 /* ---------------------------------------------------------------------------
+   FLAG SUBMIT BAR — منفصل تماماً عن الشات. الشات مفيش فيه أي فلاج كامل
+   بعد إعادة التصميم؛ اللاعب بيدمج الأجزاء يدوياً ويسلّمها هنا فقط.
+   -------------------------------------------------------------------------*/
+
+function FlagSubmitBar({ onSubmit, disabled }) {
+  const [value, setValue] = useState("");
+  const [status, setStatus] = useState(null); // { correct, message }
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!value.trim() || disabled || submitting) return;
+    setSubmitting(true);
+    setStatus(null);
+    const result = await onSubmit(value.trim());
+    setStatus(result);
+    setSubmitting(false);
+    if (result?.correct) setValue("");
+  };
+
+  return (
+    <div className="border-t border-[#E5E7EB] bg-[#FFFBEB] px-5 py-3" dir="rtl">
+      <div className="mx-auto flex max-w-4xl flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <span className="flex-none text-xs font-bold text-[#92400E]">🏁 تسليم الفلاج النهائي</span>
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            disabled={disabled}
+            placeholder="ادمجي الأجزاء الثلاثة هنا: FLAG{...}"
+            dir="ltr"
+            className="flex-1 rounded-lg border border-[#FBBF24] bg-white px-3 py-2 text-sm font-mono outline-none focus:border-[#D97706] disabled:opacity-50"
+          />
+          <button
+            onClick={submit}
+            disabled={disabled || !value.trim() || submitting}
+            className="flex-none rounded-lg bg-[#D97706] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#B45309] disabled:opacity-40"
+          >
+            {submitting ? "جاري التحقق..." : "تسليم"}
+          </button>
+        </div>
+        {status && (
+          <div className={`text-xs font-bold ${status.correct ? "text-green-700" : "text-red-700"}`}>
+            {status.message}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
    MAIN APP
    -------------------------------------------------------------------------*/
 
@@ -776,16 +828,39 @@ export default function App() {
       if (typeof data.current_score === "number") {
         setTeam((prev) => ({ ...prev, total_score: data.current_score }));
       }
-
-      if (data.is_flag_revealed) {
-        setShowAccessGranted(true);
-        setTimeout(() => setShowAccessGranted(false), 3000);
-      }
+      // ملاحظة: بعد إعادة التصميم، الشات لم يعد بيكشف الفلاج الكامل أبداً —
+      // شاشة "تم الاختراق" بقت بتتفعّل فقط من submitFlag تحت.
     } catch (err) {
       setChatError(err.message);
       setMessages((prev) => [...prev, { role: "system", content: `خطأ: ${err.message}`, time: timeNow() }]);
     } finally {
       setIsThinking(false);
+    }
+  };
+
+  // منفصل تماماً عن sendMessage — بيبعت لـ /submit_flag، مش /chat.
+  const submitFlag = async (flagValue) => {
+    if (!sessionId) return { correct: false, message: "لازم تبدئي جلسة أول." };
+    try {
+      const res = await fetch(`${API_BASE}/submit_flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, flag: flagValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { correct: false, message: data?.detail || "تعذر التحقق من الفلاج." };
+      }
+      if (typeof data.current_score === "number") {
+        setTeam((prev) => ({ ...prev, total_score: data.current_score }));
+      }
+      if (data.correct && !data.already_solved) {
+        setShowAccessGranted(true);
+        setTimeout(() => setShowAccessGranted(false), 3000);
+      }
+      return data;
+    } catch (err) {
+      return { correct: false, message: "تعذر الاتصال بالسيرفر." };
     }
   };
 
@@ -864,6 +939,7 @@ export default function App() {
           </div>
 
           <Composer onSend={sendMessage} disabled={!sessionId || isThinking} />
+          <FlagSubmitBar onSubmit={submitFlag} disabled={!sessionId} />
         </main>
       </div>
     </div>

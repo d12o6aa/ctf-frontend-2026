@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 import AdminLogs from "./AdminLogs";
 import ActiveSessions from "./ActiveSessions";
 
@@ -151,8 +151,6 @@ export default function AdminDashboard({ adminKey, onExit }) {
     }
   };
 
-  // بيفضّي الفورم ويطلع من Edit Mode — بتتنادى بعد نجاح الحفظ، بعد إلغاء
-  // التعديل، وكمان لو المستخدم حذف التحدي اللي كان بيعدّل فيه.
   const resetChallengeForm = () => {
     setEditingChallengeId(null);
     setNewChallengeName("");
@@ -162,23 +160,25 @@ export default function AdminDashboard({ adminKey, onExit }) {
     setNewChallengeBrief("");
   };
 
-  const handleEditChallengeClick = (c) => {
-    setEditingChallengeId(c.id);
-    setNewChallengeName(c.name);
-    setNewChallengePrompt(c.system_prompt);
-    setNewChallengeFlag(c.flag_text);
-    setNewChallengePoints(c.base_points);
-    setNewChallengeBrief(c.mission_brief || "");
+  const startEditChallenge = (challenge) => {
+    setEditingChallengeId(challenge.id);
+    setNewChallengeName(challenge.name || "");
+    setNewChallengePrompt(challenge.system_prompt || "");
+    setNewChallengeFlag(""); // الباك إند مايرجعش الفلاج القديم خالص — سيبيه فاضي إلا لو عايزة تغيّريه
+    setNewChallengePoints(challenge.base_points ?? 500);
+    setNewChallengeBrief(challenge.mission_brief || "");
+    // مريحة للأدمن إنه يشوف الفورم فوق أول ما يضغط تعديل، خصوصاً لو
+    // الجدول طويل والفورم بره الشاشة المرئية.
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
   };
 
-  // فورم واحد بيخدم الإضافة والتعديل — لو editingChallengeId متحدد بنبعت
-  // PUT للتحدي ده، غير كده POST تحدي جديد.
   const handleSubmitChallenge = async (e) => {
     e.preventDefault();
     setLoading(true);
     const isEditing = editingChallengeId !== null;
     const path = isEditing ? `/admin/challenges/${editingChallengeId}` : "/admin/challenges";
     const method = isEditing ? "PUT" : "POST";
+
     try {
       const res = await adminFetch(path, {
         method,
@@ -405,7 +405,13 @@ export default function AdminDashboard({ adminKey, onExit }) {
                 <textarea value={newChallengeBrief} onChange={(e) => setNewChallengeBrief(e.target.value)} placeholder="نص المهمة اللي يظهر للاعب (القصة والهدف بدون كشف الحل)" className="h-16 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <textarea required value={newChallengePrompt} onChange={(e) => setNewChallengePrompt(e.target.value)} placeholder="System Prompt" className="h-20 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <div className="grid grid-cols-2 gap-3">
-                  <input required value={newChallengeFlag} onChange={(e) => setNewChallengeFlag(e.target.value)} placeholder="FLAG{...}" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
+                  <input
+                    required={editingChallengeId === null}
+                    value={newChallengeFlag}
+                    onChange={(e) => setNewChallengeFlag(e.target.value)}
+                    placeholder={editingChallengeId === null ? "FLAG{...}" : "اتركيه فاضي للإبقاء على الفلاج الحالي"}
+                    className="rounded border p-2 text-sm outline-none focus:border-blue-500"
+                  />
                   <input required type="number" value={newChallengePoints} onChange={(e) => setNewChallengePoints(e.target.value)} placeholder="النقاط" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 </div>
               </div>
@@ -413,18 +419,18 @@ export default function AdminDashboard({ adminKey, onExit }) {
                 <button
                   disabled={loading}
                   className={`flex-1 rounded py-2 text-sm font-bold text-white ${
-                    editingChallengeId !== null ? "bg-[#2563EB] hover:bg-blue-700" : "bg-[#16A34A] hover:bg-green-700"
+                    editingChallengeId === null ? "bg-[#16A34A] hover:bg-green-700" : "bg-[#2563EB] hover:bg-blue-700"
                   }`}
                 >
-                  {editingChallengeId !== null ? "حفظ التعديلات" : "إضافة التحدي"}
+                  {editingChallengeId === null ? "إضافة التحدي" : "حفظ التعديلات"}
                 </button>
                 {editingChallengeId !== null && (
                   <button
                     type="button"
                     onClick={resetChallengeForm}
-                    className="flex items-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100"
+                    className="rounded bg-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-300"
                   >
-                    <X size={14} /> إلغاء
+                    إلغاء
                   </button>
                 )}
               </div>
@@ -439,11 +445,16 @@ export default function AdminDashboard({ adminKey, onExit }) {
                       <td className="p-2">{c.id}</td>
                       <td className="p-2 font-bold">{c.name}</td>
                       <td className="p-2 text-blue-600">{c.base_points}</td>
-                      <td className="p-2 flex gap-3">
-                        <button onClick={() => handleEditChallengeClick(c)} className="flex items-center gap-1 text-blue-500 hover:text-blue-700 font-bold">
-                          <Pencil size={14} /> تعديل
-                        </button>
-                        <button onClick={() => handleDeleteChallenge(c.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
+                      <td className="p-2">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => startEditChallenge(c)}
+                            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold"
+                          >
+                            <Pencil size={14} /> تعديل
+                          </button>
+                          <button onClick={() => handleDeleteChallenge(c.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
