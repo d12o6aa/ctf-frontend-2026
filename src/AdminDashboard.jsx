@@ -8,6 +8,7 @@ const API_BASE = "https://ox-vault-backend-2026-cb729bd57697.herokuapp.com";
 export default function AdminDashboard({ adminKey, onExit }) {
   const [teams, setTeams] = useState([]);
   const [challenges, setChallenges] = useState([]);
+  const [solvesAnalytics, setSolvesAnalytics] = useState([]); // 📊 إضافة حالة تقارير الحلول
   const [stats, setStats] = useState({
     overview: {
       teams_count: 0,
@@ -36,16 +37,13 @@ export default function AdminDashboard({ adminKey, onExit }) {
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", type: "" });
-  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "logs" | "sessions"
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "logs" | "sessions" | "analytics"
 
   const showMessage = (text, type = "success") => {
     setMsg({ text, type });
     setTimeout(() => setMsg({ text: "", type: "" }), 3000);
   };
 
-  // كل طلب أدمن لازم يحمل هذا الهيدر. لو adminKey مفقود أو رفضه السيرفر
-  // (403)، نعتبر الجلسة منتهية ونرجّع المستخدم لتسجيل الدخول بدل ما
-  // نسيبه شايف بيانات فاضية بصمت.
   const adminFetch = useCallback(
     async (path, options = {}) => {
       const res = await fetch(`${API_BASE}${path}`, {
@@ -65,10 +63,11 @@ export default function AdminDashboard({ adminKey, onExit }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [resTeams, resChallenges, resStats] = await Promise.all([
+      const [resTeams, resChallenges, resStats, resAnalytics] = await Promise.all([
         adminFetch("/admin/teams"),
         adminFetch("/admin/challenges"),
         adminFetch("/admin/stats"),
+        adminFetch("/admin/analytics/solves"), // 📊 جلب بيانات التحليلات مع التحديثات الدورية
       ]);
 
       if (resTeams.ok) setTeams(await resTeams.json());
@@ -78,6 +77,12 @@ export default function AdminDashboard({ adminKey, onExit }) {
         setStats(statsData);
         if (typeof statsData?.overview?.is_active === "boolean") {
           setIsCompetitionActive(statsData.overview.is_active);
+        }
+      }
+      if (resAnalytics.ok) {
+        const analyticsData = await resAnalytics.json();
+        if (analyticsData.status === "success") {
+          setSolvesAnalytics(analyticsData.data);
         }
       }
     } catch (err) {
@@ -150,10 +155,11 @@ export default function AdminDashboard({ adminKey, onExit }) {
       showMessage("خطأ أثناء الحذف", "error");
     }
   };
+
   const handleToggleLevel = async (teamId, challengeId) => {
     try {
       const res = await adminFetch(`/admin/teams/${teamId}/toggle-level/${challengeId}`, { method: "POST" });
-      if (res.ok) fetchData(); // تحديث الداتا عشان الزرار يغير لونه
+      if (res.ok) fetchData();
     } catch (err) {
       showMessage("خطأ أثناء تحديث المستوى", "error");
     }
@@ -172,8 +178,6 @@ export default function AdminDashboard({ adminKey, onExit }) {
     }
   };
 
-  // بيفضّي الفورم ويطلع من Edit Mode — بتتنادى بعد نجاح الحفظ، بعد إلغاء
-  // التعديل، وكمان لو المستخدم حذف التحدي اللي كان بيعدّل فيه.
   const resetChallengeForm = () => {
     setEditingChallengeId(null);
     setNewChallengeName("");
@@ -192,8 +196,6 @@ export default function AdminDashboard({ adminKey, onExit }) {
     setNewChallengeBrief(c.mission_brief || "");
   };
 
-  // فورم واحد بيخدم الإضافة والتعديل — لو editingChallengeId متحدد بنبعت
-  // PUT للتحدي ده، غير كده POST تحدي جديد.
   const handleSubmitChallenge = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -245,13 +247,8 @@ export default function AdminDashboard({ adminKey, onExit }) {
         <div className="max-w-sm rounded-xl bg-white p-8 text-center shadow-sm">
           <div className="mb-3 text-4xl">🔒</div>
           <h2 className="mb-2 text-lg font-bold text-gray-800">انتهت صلاحية جلسة الأدمن</h2>
-          <p className="mb-6 text-sm text-gray-500">
-            سجّل الدخول مرة أخرى بحساب الأدمن للمتابعة.
-          </p>
-          <button
-            onClick={onExit}
-            className="w-full rounded-lg bg-[#1E3A8A] py-2.5 text-sm font-bold text-white hover:bg-blue-800"
-          >
+          <p className="mb-6 text-sm text-gray-500">سجّل الدخول مرة أخرى بحساب الأدمن للمتابعة.</p>
+          <button onClick={onExit} className="w-full rounded-lg bg-[#1E3A8A] py-2.5 text-sm font-bold text-white hover:bg-blue-800">
             الرجوع لتسجيل الدخول
           </button>
         </div>
@@ -296,6 +293,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
             { id: "overview", label: "📋 نظرة عامة" },
             { id: "logs", label: "🛰️ المراقبة الحية" },
             { id: "sessions", label: "⚡ الجلسات النشطة" },
+            { id: "analytics", label: "📊 تقارير الحلول" }, // 📊 التاب الجديدة للجدول
           ].map((tab) => (
             <button
               key={tab.id}
@@ -313,6 +311,51 @@ export default function AdminDashboard({ adminKey, onExit }) {
 
         {activeTab === "logs" && <AdminLogs adminKey={adminKey} />}
         {activeTab === "sessions" && <ActiveSessions adminKey={adminKey} />}
+
+        {/* 📊 عرض جدول تقارير الحلول في التاب الخاصة به */}
+        {activeTab === "analytics" && (
+          <div className="overflow-x-auto mt-6 bg-white p-6 rounded-xl shadow-sm">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">📊 تقرير تفصيلي لأداء الفرق والحلول</h3>
+            <table className="min-w-full divide-y divide-gray-200 text-right">
+              <thead>
+                <tr className="bg-gray-50 text-gray-600">
+                  <th className="px-4 py-3 text-xs font-medium uppercase">اسم الفريق</th>
+                  <th className="px-4 py-3 text-xs font-medium uppercase">المستوى (التحدي)</th>
+                  <th className="px-4 py-3 text-xs font-medium uppercase">وقت الحل (بالدقائق)</th>
+                  <th className="px-4 py-3 text-xs font-medium uppercase">عدد المحاولات</th>
+                  <th className="px-4 py-3 text-xs font-medium uppercase">الحالة التنافسية</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {solvesAnalytics.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-6 text-gray-400 text-sm font-bold">
+                      لا توجد حلول مسجلة حتى الآن...
+                    </td>
+                  </tr>
+                ) : (
+                  solvesAnalytics.map((row, index) => (
+                    <tr key={index} className={row.is_first_blood ? "bg-yellow-50" : "hover:bg-gray-50"}>
+                      <td className="px-4 py-3 text-sm font-semibold text-gray-900">{row.team_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{row.challenge_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{row.time_spent_minutes} دقيقة</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{row.attempts_count} محاولات</td>
+                      <td className="px-4 py-3 text-sm">
+                        {row.is_first_blood ? (
+                          <span className="px-2.5 py-1 text-xs font-bold text-white bg-amber-500 rounded-full shadow-sm">
+                            🔥 First Blood!
+                          </span>
+                        ) : (
+                          <span className="text-gray-500 font-medium">حل صحيح</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {activeTab === "overview" && (
         <>
@@ -349,7 +392,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
             </div>
           </div>
 
-          {/* Challenge stats — now with attempts + blocked rate */}
+          {/* Challenge stats */}
           <div className="rounded-xl bg-white p-6 shadow-sm border-t-4 border-red-500">
             <h2 className="mb-4 text-xl font-bold text-gray-800">📊 إحصائيات التحديات</h2>
             <div className="max-h-64 overflow-y-auto">
@@ -384,7 +427,6 @@ export default function AdminDashboard({ adminKey, onExit }) {
           <div className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xl font-bold text-gray-800">👥 إدارة الفرق والمستويات</h2>
             
-            {/* ⚡ لوحة التحكم الجماعي */}
             <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
               <h3 className="mb-3 text-sm font-bold text-blue-800">⚡ تحكم جماعي في المستويات (لجميع الفرق دفعة واحدة)</h3>
               <div className="flex flex-wrap gap-3">
@@ -425,7 +467,6 @@ export default function AdminDashboard({ adminKey, onExit }) {
                         <span className="mr-2 text-xs text-green-600">({t.total_score} pts)</span>
                       </td>
                       <td className="p-2">
-                        {/* 🔘 زراير التوجل لكل مستوى */}
                         <div className="flex flex-wrap items-center justify-center gap-1.5">
                           {challenges.map(c => {
                             const isUnlocked = t.unlocked_challenges?.includes(c.id);
@@ -462,7 +503,7 @@ export default function AdminDashboard({ adminKey, onExit }) {
             <form onSubmit={handleSubmitChallenge} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="mb-3 space-y-3">
                 <input required value={newChallengeName} onChange={(e) => setNewChallengeName(e.target.value)} placeholder="اسم التحدي" className="w-full rounded border p-2 text-sm outline-none focus:border-blue-500" />
-                <textarea value={newChallengeBrief} onChange={(e) => setNewChallengeBrief(e.target.value)} placeholder="نص المهمة اللي يظهر للاعب (القصة والهدف بدون كشف الحل)" className="h-16 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
+                <textarea value={newChallengeBrief} onChange={(e) => setNewChallengeBrief(e.target.value)} placeholder="نص المهمة اللي يظهر للاعب" className="h-16 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <textarea required value={newChallengePrompt} onChange={(e) => setNewChallengePrompt(e.target.value)} placeholder="System Prompt" className="h-20 w-full resize-none rounded border p-2 text-sm outline-none focus:border-blue-500" />
                 <div className="grid grid-cols-2 gap-3">
                   <input required value={newChallengeFlag} onChange={(e) => setNewChallengeFlag(e.target.value)} placeholder="FLAG{...}" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
