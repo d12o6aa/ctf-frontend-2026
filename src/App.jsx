@@ -291,20 +291,35 @@ function ObjectiveSelector({ challenges, onSelect, onClose }) {
               <button
                 key={c.id}
                 onClick={() => onSelect(c)}
-                className="group flex w-full flex-col items-start gap-2 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4 text-right transition hover:border-[#2563EB] hover:bg-[#EFF6FF]"
+                disabled={!c.is_unlocked}
+                className={`group flex w-full flex-col items-start gap-2 rounded-lg border p-4 text-right transition ${
+                  c.is_unlocked
+                    ? "border-[#E5E7EB] bg-[#F9FAFB] hover:border-[#2563EB] hover:bg-[#EFF6FF]"
+                    : "cursor-not-allowed border-gray-200 bg-gray-100 opacity-65"
+                }`}
               >
                 <div className="flex w-full items-center justify-between">
-                  <span className="font-bold text-[#1F2937] group-hover:text-[#2563EB]">{c.name}</span>
-                  <span className="rounded bg-[#E5E7EB] px-2 py-1 text-xs font-bold text-[#4B5563] group-hover:bg-[#DBEAFE] group-hover:text-[#1E40AF]">
+                  <span className={`font-bold ${c.is_unlocked ? "text-[#1F2937] group-hover:text-[#2563EB]" : "text-gray-500"}`}>
+                    {c.is_unlocked ? c.name : `🔒 ${c.name} (مغلق)`}
+                  </span>
+                  <span className={`rounded px-2 py-1 text-xs font-bold ${
+                    c.is_unlocked 
+                      ? "bg-[#E5E7EB] text-[#4B5563] group-hover:bg-[#DBEAFE] group-hover:text-[#1E40AF]" 
+                      : "bg-gray-200 text-gray-400"
+                  }`}>
                     {getTier(c.base_points)} ({c.base_points} نقطة)
                   </span>
                 </div>
                 <div className="text-sm leading-relaxed text-[#4B5563]">
-                  {getChallengeBrief(c)}
+                  {c.is_unlocked 
+                    ? getChallengeBrief(c) 
+                    : "هذا المستوى مغلق حالياً، سيتم فتحه بناءً على تعليمات لجنة التحكيم أو عند التأهل."}
                 </div>
-                <div className="mt-1 text-xs font-bold text-[#9CA3AF]">
-                  صيغة العلم: FLAG&#123;...&#125;
-                </div>
+                {c.is_unlocked && (
+                  <div className="mt-1 text-xs font-bold text-[#9CA3AF]">
+                    صيغة العلم: FLAG&#123;...&#125;
+                  </div>
+                )}
               </button>
             ))
           )}
@@ -596,9 +611,11 @@ export default function App() {
 
   // دالة لجلب التحديات من الباك إند — endpoint عام مخصص للاعبين،
   // منفصل عن /admin/challenges اللي بقى محمي بمفتاح الأدمن.
+  // تعديل الدالة في App.jsx لتمرير الـ team_id
   const fetchChallenges = useCallback(async () => {
+    if (!team?.team_id) return;
     try {
-      const res = await fetch(`${API_BASE}/challenges`);
+      const res = await fetch(`${API_BASE}/challenges?team_id=${team.team_id}`);
       if (res.ok) {
         const data = await res.json();
         setChallenges(data);
@@ -606,7 +623,9 @@ export default function App() {
     } catch (err) {
       console.error("Failed to load challenges from DB", err);
     }
-  }, []);
+  }, [team]);
+
+  
 
   // مصدر وقت المسابقة الحقيقي: السيرفر، لا localStorage.
   // Backend TODO: يجب إضافة GET /competition/status ترجع
