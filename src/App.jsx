@@ -287,7 +287,10 @@ function ObjectiveSelector({ challenges, onSelect, onClose }) {
               جاري تحميل التحديات أو لا توجد تحديات متاحة حالياً...
             </div>
           ) : (
-            challenges.map((c) => (
+            challenges
+              .slice() // بنعمل نسخة من الـ array عشان مَنَعَش أي mutation مباشر لليستة الأصلية
+              .sort((a, b) => a.id - b.id) // ترتيب تصاعدي حسب الـ id (أو حسب difficulty لو متاح عندك)
+              .map((c) => (
               <button
                 key={c.id}
                 onClick={() => onSelect(c)}
