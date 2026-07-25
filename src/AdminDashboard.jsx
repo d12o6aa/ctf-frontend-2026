@@ -150,6 +150,27 @@ export default function AdminDashboard({ adminKey, onExit }) {
       showMessage("خطأ أثناء الحذف", "error");
     }
   };
+  const handleToggleLevel = async (teamId, challengeId) => {
+    try {
+      const res = await adminFetch(`/admin/teams/${teamId}/toggle-level/${challengeId}`, { method: "POST" });
+      if (res.ok) fetchData(); // تحديث الداتا عشان الزرار يغير لونه
+    } catch (err) {
+      showMessage("خطأ أثناء تحديث المستوى", "error");
+    }
+  };
+
+  const handleBulkToggle = async (challengeId, action) => {
+    if (!window.confirm(`هل أنت متأكد من ${action === 'unlock' ? 'فتح' : 'غلق'} هذا المستوى لجميع الفرق؟`)) return;
+    try {
+      const res = await adminFetch(`/admin/challenges/${challengeId}/toggle-all?action=${action}`, { method: "POST" });
+      if (res.ok) {
+        showMessage("تم تطبيق التغيير على جميع الفرق!");
+        fetchData();
+      }
+    } catch (err) {
+      showMessage("خطأ أثناء التحكم الجماعي", "error");
+    }
+  };
 
   const handleUnlockLevel = async (teamId, challengeId) => {
     if (!challengeId) return; // لو اختار "افتح مستوى..." الفاضية ميعملش حاجة
@@ -375,7 +396,22 @@ export default function AdminDashboard({ adminKey, onExit }) {
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* Teams Section */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-bold text-gray-800">👥 إدارة الفرق</h2>
+            <h2 className="mb-4 text-xl font-bold text-gray-800">👥 إدارة الفرق والمستويات</h2>
+            
+            {/* ⚡ لوحة التحكم الجماعي */}
+            <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <h3 className="mb-3 text-sm font-bold text-blue-800">⚡ تحكم جماعي في المستويات (لجميع الفرق دفعة واحدة)</h3>
+              <div className="flex flex-wrap gap-3">
+                {challenges.map(c => (
+                  <div key={c.id} className="flex items-center gap-2 rounded bg-white px-2 py-1.5 shadow-sm border border-blue-100">
+                    <span className="text-xs font-bold text-gray-700">{c.name}</span>
+                    <button onClick={() => handleBulkToggle(c.id, 'unlock')} className="rounded bg-green-100 px-2 py-1 text-[10px] font-bold text-green-700 hover:bg-green-200">فتح للكل</button>
+                    <button onClick={() => handleBulkToggle(c.id, 'lock')} className="rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 hover:bg-red-200">غلق للكل</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <form onSubmit={handleAddTeam} className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="mb-3 grid grid-cols-2 gap-3">
                 <input required value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="اسم الفريق" className="rounded border p-2 text-sm outline-none focus:border-blue-500" />
@@ -384,36 +420,48 @@ export default function AdminDashboard({ adminKey, onExit }) {
               <button disabled={loading} className="w-full rounded bg-[#1E3A8A] py-2 text-sm font-bold text-white hover:bg-blue-800">إضافة الفريق</button>
             </form>
 
-            <div className="max-h-64 overflow-y-auto">
+            <div className="max-h-80 overflow-y-auto">
               <table className="w-full text-right text-sm">
                 <thead>
                   <tr className="border-b bg-gray-50 text-gray-600">
-                    <th className="p-2">ID</th>
-                    <th className="p-2">اسم الفريق</th>
-                    <th className="p-2">النقاط</th>
-                    <th className="p-2">إجراء</th>
+                    <th className="p-2 w-16">ID</th>
+                    <th className="p-2">الفريق (النقاط)</th>
+                    <th className="p-2 text-center">المستويات (أخضر = مفتوح)</th>
+                    <th className="p-2 text-left">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
                   {teams.map(t => (
                     <tr key={t.team_id ?? t.id} className="border-b hover:bg-gray-50">
-                      <td className="p-2">{t.team_id ?? t.id}</td>
-                      <td className="p-2 font-bold text-blue-600">{t.team_name ?? t.username ?? "بدون اسم"}</td>
-                      <td className="p-2 text-green-600">{t.total_score}</td>
+                      <td className="p-2 text-gray-500 font-bold">#{t.team_id ?? t.id}</td>
+                      <td className="p-2 font-bold text-blue-600">
+                        {t.team_name ?? t.username ?? "بدون اسم"} 
+                        <span className="mr-2 text-xs text-green-600">({t.total_score} pts)</span>
+                      </td>
                       <td className="p-2">
-                        <div className="flex items-center gap-2">
-                          <select 
-                            onChange={(e) => {
-                              handleUnlockLevel(t.team_id ?? t.id, e.target.value);
-                              e.target.value = ""; // ترجيع القائمة للوضع الافتراضي بعد الاختيار
-                            }}
-                            className="text-xs border border-gray-300 p-1.5 rounded bg-gray-50 outline-none focus:border-blue-500"
-                          >
-                            <option value="">افتح مستوى...</option>
-                            {challenges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                          <button onClick={() => handleDeleteTeam(t.team_id ?? t.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
+                        {/* 🔘 زراير التوجل لكل مستوى */}
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                          {challenges.map(c => {
+                            const isUnlocked = t.unlocked_challenges?.includes(c.id);
+                            return (
+                              <button 
+                                key={c.id}
+                                onClick={() => handleToggleLevel(t.team_id ?? t.id, c.id)}
+                                title={c.name}
+                                className={`flex h-7 w-7 items-center justify-center rounded font-bold text-xs transition-all ${
+                                  isUnlocked 
+                                  ? "bg-green-500 text-white hover:bg-green-600 shadow-inner" 
+                                  : "bg-gray-200 text-gray-400 hover:bg-gray-300"
+                                }`}
+                              >
+                                {c.id}
+                              </button>
+                            )
+                          })}
                         </div>
+                      </td>
+                      <td className="p-2 text-left">
+                        <button onClick={() => handleDeleteTeam(t.team_id ?? t.id)} className="text-red-500 hover:text-red-700 font-bold" title="حذف الفريق">🗑️</button>
                       </td>
                     </tr>
                   ))}
