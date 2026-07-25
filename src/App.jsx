@@ -435,7 +435,56 @@ function ThinkingLine() {
    SIDEBAR (Console)
    -------------------------------------------------------------------------*/
 
-function Console({ team, activeChallenge, attempts, onNewChat, onLogout }) {
+function FlagSubmitBox({ disabled, onSubmit }) {
+  const [value, setValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!value.trim() || disabled || submitting) return;
+    setSubmitting(true);
+    setResult(null);
+    const res = await onSubmit(value.trim());
+    setResult(res);
+    if (res?.correct) setValue("");
+    setSubmitting(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-3 rounded-lg border border-[#E5E7EB] bg-white p-3">
+      <label className="mb-1.5 block text-[11px] font-bold text-[#6B7280]">تسليم العلم</label>
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          disabled={disabled || submitting}
+          placeholder="FLAG{...}"
+          dir="ltr"
+          className="min-w-0 flex-1 rounded border border-[#D1D5DB] px-2 py-1.5 text-xs font-bold text-[#1F2937] outline-none focus:border-[#2563EB] disabled:bg-[#F3F4F6] disabled:text-[#9CA3AF]"
+        />
+        <button
+          type="submit"
+          disabled={disabled || submitting || !value.trim()}
+          className="flex-none rounded bg-[#16A34A] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#15803D] disabled:opacity-40"
+        >
+          {submitting ? "..." : "إرسال"}
+        </button>
+      </div>
+      {result && (
+        <div
+          className={`mt-2 rounded px-2 py-1.5 text-[11px] font-bold ${
+            result.correct ? "bg-[#DCFCE7] text-[#16A34A]" : "bg-[#FEE2E2] text-[#DC2626]"
+          }`}
+        >
+          {result.message}
+        </div>
+      )}
+    </form>
+  );
+}
+
+function Console({ team, activeChallenge, attempts, onNewChat, onLogout, onSubmitFlag }) {
   return (
     <aside className="flex h-full w-[320px] flex-none flex-col border-l border-[#E5E7EB] bg-white shadow-sm" dir="rtl">
       {/* Header */}
@@ -478,6 +527,8 @@ function Console({ team, activeChallenge, attempts, onNewChat, onLogout }) {
                 <span className="text-[#1F2937]">{attempts}</span>
               </div>
             )}
+
+            <FlagSubmitBox disabled={!activeChallenge} onSubmit={onSubmitFlag} />
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-[#D1D5DB] bg-[#F9FAFB] p-6 text-center text-sm font-bold text-[#6B7280]">
@@ -811,6 +862,39 @@ export default function App() {
     }
   };
 
+  // تسليم الفلاج — مسار منفصل تماماً عن /chat (شوف main.py:/submit_flag).
+  // بيرجع { correct, message, current_score?, already_solved? } وبنعرضها
+  // زي ما هي من غير أي تعديل، لأن السيرفر هو مصدر الحقيقة الوحيد هنا.
+  const submitFlag = async (flagValue) => {
+    if (!sessionId) {
+      return { correct: false, message: "لا توجد جلسة نشطة حالياً." };
+    }
+    try {
+      const res = await fetch(`${API_BASE}/submit_flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, flag: flagValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { correct: false, message: data.detail || "تعذر إرسال الفلاج." };
+      }
+      if (data.correct) {
+        if (typeof data.current_score === "number") {
+          setTeam((prev) => ({ ...prev, total_score: data.current_score }));
+        }
+        if (!data.already_solved) {
+          setShowAccessGranted(true);
+          setTimeout(() => setShowAccessGranted(false), 3000);
+        }
+        fetchChallenges(); // تحديث حالة الفتح/الحل في القائمة الجانبية
+      }
+      return { correct: data.correct, message: data.message };
+    } catch (err) {
+      return { correct: false, message: "لا يمكن الاتصال بالخادم." };
+    }
+  };
+
   const globalStyle = FONT_IMPORTS + GLOBAL_KEYFRAMES;
 
   if (isAdminMode) {
@@ -862,6 +946,7 @@ export default function App() {
           attempts={sessionId ? attempts : null}
           onNewChat={startNewChat}
           onLogout={handleLogout}
+          onSubmitFlag={submitFlag}
         />
 
         <main className="relative flex flex-1 flex-col bg-[#F9FAFB]">

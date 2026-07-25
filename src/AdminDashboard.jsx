@@ -172,20 +172,6 @@ export default function AdminDashboard({ adminKey, onExit }) {
     }
   };
 
-  const handleUnlockLevel = async (teamId, challengeId) => {
-    if (!challengeId) return; // لو اختار "افتح مستوى..." الفاضية ميعملش حاجة
-    try {
-      const res = await adminFetch(`/admin/teams/${teamId}/unlock-level/${challengeId}`, { method: "POST" });
-      if (res.ok) {
-        showMessage("تم فتح المستوى للفريق بنجاح! 🔓");
-      } else {
-        showMessage("حدث خطأ في السيرفر", "error");
-      }
-    } catch (err) {
-      showMessage("خطأ أثناء فتح المستوى", "error");
-    }
-  };
-
   // بيفضّي الفورم ويطلع من Edit Mode — بتتنادى بعد نجاح الحفظ، بعد إلغاء
   // التعديل، وكمان لو المستخدم حذف التحدي اللي كان بيعدّل فيه.
   const resetChallengeForm = () => {
