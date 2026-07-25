@@ -613,9 +613,13 @@ export default function App() {
   // منفصل عن /admin/challenges اللي بقى محمي بمفتاح الأدمن.
   // تعديل الدالة في App.jsx لتمرير الـ team_id
   const fetchChallenges = useCallback(async () => {
-    if (!team?.team_id) return;
+    // بنستخدم team_id أو id عشان نتفادى أي مشكلة لو المتصفح مسجل داتا قديمة
+    const currentTeamId = team?.team_id || team?.id; 
+    if (!currentTeamId) return;
+
     try {
-      const res = await fetch(`${API_BASE}/challenges?team_id=${team.team_id}`);
+      // هنا ضفنا الـ team_id في الرابط عشان السيرفر يعرف مين اللي بيسأل
+      const res = await fetch(`${API_BASE}/challenges?team_id=${currentTeamId}`);
       if (res.ok) {
         const data = await res.json();
         setChallenges(data);
