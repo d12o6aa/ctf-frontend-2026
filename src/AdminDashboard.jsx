@@ -151,6 +151,20 @@ export default function AdminDashboard({ adminKey, onExit }) {
     }
   };
 
+  const handleUnlockLevel = async (teamId, challengeId) => {
+    if (!challengeId) return; // لو اختار "افتح مستوى..." الفاضية ميعملش حاجة
+    try {
+      const res = await adminFetch(`/admin/teams/${teamId}/unlock-level/${challengeId}`, { method: "POST" });
+      if (res.ok) {
+        showMessage("تم فتح المستوى للفريق بنجاح! 🔓");
+      } else {
+        showMessage("حدث خطأ في السيرفر", "error");
+      }
+    } catch (err) {
+      showMessage("خطأ أثناء فتح المستوى", "error");
+    }
+  };
+
   const resetChallengeForm = () => {
     setEditingChallengeId(null);
     setNewChallengeName("");
@@ -387,7 +401,19 @@ export default function AdminDashboard({ adminKey, onExit }) {
                       <td className="p-2 font-bold text-blue-600">{t.team_name ?? t.username ?? "بدون اسم"}</td>
                       <td className="p-2 text-green-600">{t.total_score}</td>
                       <td className="p-2">
-                        <button onClick={() => handleDeleteTeam(t.team_id ?? t.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
+                        <div className="flex items-center gap-2">
+                          <select 
+                            onChange={(e) => {
+                              handleUnlockLevel(t.team_id ?? t.id, e.target.value);
+                              e.target.value = ""; // ترجيع القائمة للوضع الافتراضي بعد الاختيار
+                            }}
+                            className="text-xs border border-gray-300 p-1.5 rounded bg-gray-50 outline-none focus:border-blue-500"
+                          >
+                            <option value="">افتح مستوى...</option>
+                            {challenges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                          <button onClick={() => handleDeleteTeam(t.team_id ?? t.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️ حذف</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
